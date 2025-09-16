@@ -1,66 +1,66 @@
 # KipuBank
 
-Um simples Smart Contract para armazenamento de ETH.
+A simple Smart Contract for ETH storage.
 
-Aqui, é possível:
-- **Depósitar** uma quantidade de ETH passada via `msg.value`.
-- **Sacar** uma quantidade de ETH. Existe um limite máxima de saque por transação (`ETHER_WITHDRAW_LIMIT`).
+Here, you can:
+- **Deposit** an amount of ETH passed via `msg.value`.
+- **Withdraw** an amount of ETH. There is a maximum withdrawal limit per transaction (`ETHER_WITHDRAW_LIMIT`).
 
-## Sumário
-- [Resumo](#resumo)
-- [Detalhes do Contrato](#detalhes-do-contrato)
-- [Como fazer deploy (Remix)](#deploy-remix)
-- [Como interagir](#como-interagir)
-- [Endereço implantado](#endereço-implantado)
+## Table of Contents
+- [Summary](#summary)
+- [Contract Details](#contract-details)
+- [How to Deploy (Remix)](#deploy-remix)
+- [How to Interact](#how-to-interact)
+- [Deployed Address](#deployed-address)
 
-## Resumo
-- `MAX_BANK_CAP` (`immutable`): teto global definido no deploy.
-- `currentBankCap`: capacidade restante, ou seja, quanto ainda cabe depositar.
-- `balances[address]`: saldo individual de cada conta que eventualmente depositar.
-- `ETHER_WITHDRAW_LIMIT` (`constant`): limite de saque por tx.
-- Contadores: `countDeposits`, `countWithdrawals`.
+## Summary
+- `MAX_BANK_CAP` (`immutable`): global cap defined at deployment.
+- `currentBankCap`: remaining capacity, i.e., how much can still be deposited.
+- `balances[address]`: individual balance of each account that deposits.
+- `ETHER_WITHDRAW_LIMIT` (`constant`): withdrawal limit per transaction.
+- Counters: `countDeposits`, `countWithdrawals`.
 
-## Detalhes do Contrato
+## Contract Details
 
-### Funções
+### Functions
 - `deposit() external payable onlyValidValue(msg.value)`
-  Deposita `msg.value` no seu saldo. Reverte com:
-  - `InvalidValue()` se `msg.value <= 0`
-  - `BankCapExceeded(requested, available)` se exceder `currentBankCap`
+  Deposits `msg.value` into your balance. Reverts with:
+  - `InvalidValue()` if `msg.value <= 0`
+  - `BankCapExceeded(requested, available)` if exceeding `currentBankCap`
 
 - `withdraw(uint256 value) external onlyValidValue(value)`
-  Saca `value` do seu saldo. Reverte com:
-  - `InvalidValue()` se `value <= 0`
-  - `WithdrawLimitExceeded(requested, limit)` se `value > ETHER_WITHDRAW_LIMIT`
-  - `InsufficientBalance(requested, available)` se `value > balance`
+  Withdraws `value` from your balance. Reverts with:
+  - `InvalidValue()` if `value <= 0`
+  - `WithdrawLimitExceeded(requested, limit)` if `value > ETHER_WITHDRAW_LIMIT`
+  - `InsufficientBalance(requested, available)` if `value > balance`
 
 - `getBalance(address account) external onlyOwner view returns (uint256)`
-  Retorna o saldo de `account`.
+  Returns the balance of `account`.
 
 - `getBalance() external view returns (uint256)`
-  Retorna o saldo do `msg.sender`.
+  Returns the balance of `msg.sender`.
 
 - `updateOwner(address newOwner) external onlyOwner`
-  Atualiza o `owner`. Reverte com `Unauthorized()` se `msg.sender != owner`.
+  Updates the `owner`. Reverts with `Unauthorized()` if `msg.sender != owner`.
 
 - `countTransactions() private view returns (uint256)`
-  Retorna a soma de `countDeposits + countWithdrawals`.
+  Returns the sum of `countDeposits + countWithdrawals`.
 
 - `essentialFunction() private`
-  Não faz nada. :)
+  Does nothing. :)
 
-### Eventos
+### Events
 - `event Deposit(address indexed account, uint256 value)`
 - `event Withdraw(address indexed account, uint256 value)`
 
 ### Modifiers
 - `onlyOwner()`
-  Restringe o acesso a funções apenas para o `owner`.
+  Restricts function access to the `owner`.
 
 - `onlyValidValue(uint256 value)`
-  Reverte com `InvalidValue()` se `value <= 0`.
+  Reverts with `InvalidValue()` if `value <= 0`.
 
-### Erros personalizados
+### Custom Errors
 `InvalidValue()`,
 `BankCapExceeded(uint256 requested, uint256 available)`,
 `WithdrawLimitExceeded(uint256 requested, uint256 limit)`,
@@ -68,45 +68,45 @@ Aqui, é possível:
 `TransferFailed()`,
 `Unauthorized()`.
 
-## Como fazer deploy (Remix)
+## How to Deploy (Remix)
 
-### Pré-requisitos
-- **MetaMask** (ou outra carteira) conectada a uma **testnet** (ex.: **Sepolia**).
-- Algum **ETH de testnet** (use um *faucet*).
-- Acesse: https://remix.ethereum.org
+### Prerequisites
+- **MetaMask** (or another wallet) connected to a **testnet** (e.g., **Sepolia**).
+- Some **testnet ETH** (use a faucet).
+- Access: https://remix.ethereum.org
 
-### Passo a passo
-1. Abra o Remix, vá em **File Explorer** → **Create New File** → `KipuBank.sol` e cole o contrato.
-2. Aba **Solidity Compiler**:
-   - Versão: qualquer acima de **0.8.20** (igual ao pragma do contrato).
-   - Clique **Compile KipuBank.sol**.
-3. Aba **Deploy & Run Transactions**:
-   - **Environment**: *Injected Provider – MetaMask* (usa a rede da sua carteira).
-   - **Account**: selecione a conta com ETH de testnet.
+### Step by Step
+1. Open Remix, go to **File Explorer** → **Create New File** → `KipuBank.sol` and paste the contract.
+2. In the **Solidity Compiler** tab:
+   - Version: any above **0.8.20** (same as the contract pragma).
+   - Click **Compile KipuBank.sol**.
+3. In the **Deploy & Run Transactions** tab:
+   - **Environment**: *Injected Provider – MetaMask* (uses your wallet's network).
+   - **Account**: select the account with testnet ETH.
    - **Contract**: `KipuBank – contracts/KipuBank.sol`.
-   - Clique **Deploy** e confirme na carteira.
-4. Copie o **endereço do contrato** após o deploy (aparece no painel do Remix e no explorer).
+   - Click **Deploy** and confirm in the wallet.
+4. Copy the **contract address** after deployment (shown in Remix panel and on the explorer).
 
-## Como interagir
+## How to Interact
 
 ### Via Remix
 - **deposit**
-  No topo da aba **Deploy & Run Transactions**, no campo **VALUE**, informe por exemplo `0.1 ether` e chame `deposit()`.
+  At the top of the **Deploy & Run Transactions** tab, in the **VALUE** field, enter for example `0.1 ether` and call `deposit()`.
 
 - **withdraw**
-  Chame `withdraw(value)`. Ex.: `0.05 ether` (ou `50000000000000000` wei).
+  Call `withdraw(value)`. Example: `0.05 ether` (or `50000000000000000` wei).
 
 - **getBalance**
-  Clique para ler; retorna seu saldo em **wei**.
+  Click to read; returns your balance in **wei**.
 
 - **getBalance(address account)**
-  Informe o `address` e clique para ler (somente o `owner` pode chamar).
+  Enter the `address` and click to read (only the `owner` can call).
 
 - **updateOwner**
-  Informe `newOwner` (endereço) e execute (somente o `owner` atual pode chamar).
+  Enter `newOwner` (address) and execute (only the current `owner` can call).
 
-## Endereço implantado
+## Deployed Address
 
-- **Rede:** Sepolia
-- **Endereço:** `0x33902A5646Fdd4e1f1580FeD429CFE022ECF049D`
- **Explorer:** `https://sepolia.etherscan.io/tx/0xa0c969b9dfbd120231e9055f1744ad7daacc35adc35874212b573796cee4d6a3`
+- **Network:** Sepolia
+- **Address:** `0x33902A5646Fdd4e1f1580FeD429CFE022ECF049D`
+- **Explorer:** `https://sepolia.etherscan.io/tx/0xa0c969b9dfbd120231e9055f1744ad7daacc35adc35874212b573796cee4d6a3`
