@@ -32,9 +32,13 @@ contract KipuBank {
     /// =========================== EVENTS ===========================
 
     /// @notice Event emitted when a deposit is made
+    /// @param account The address of the account making the deposit
+    /// @param value The amount of Ether deposited in wei
     event Deposit(address indexed account, uint256 value);
 
     /// @notice Event emitted when a withdraw is made
+    /// @param account The address of the account making the withdrawal
+    /// @param value The amount of Ether withdrawn in wei
     event Withdraw(address indexed account, uint256 value);
 
     /// =========================== ERRORS ===========================
@@ -82,6 +86,7 @@ contract KipuBank {
     /// =========================== FUNCTIONS ===========================
 
     /// @notice Contract constructor
+    /// @param _maxBankCap The maximum capacity of the bank
     constructor(uint256 _maxBankCap) {
         MAX_BANK_CAP = _maxBankCap;
 		currentBankCap = MAX_BANK_CAP;
@@ -107,6 +112,7 @@ contract KipuBank {
     }
 
     /// @notice The actual withdraw function
+    /// @param _value The amount of Ether to withdraw in wei
     function withdraw(uint256 _value) external onlyValidValue(_value) {
         if (_value > ETHER_WITHDRAW_LIMIT) {
             revert WithdrawLimitExceeded({
@@ -134,17 +140,19 @@ contract KipuBank {
         emit Withdraw(msg.sender, _value);
     }
 
-	/// @notice Function to get the balance of a specific account
-	function getBalance(address account) external onlyOwner view returns (uint256) {
-		return balances[account];
-	}
+    /// @notice Function to get the balance of a specific account
+    /// @param account The address of the account to check the balance
+    function getBalance(address account) external view onlyOwner returns (uint256) {
+        return balances[account];
+    }
 
     /// @notice Function to get the balance of the caller
     function getBalance() external view returns (uint256) {
         return balances[msg.sender];
     }
 
-	/// @notice Function to update the owner of the contract
+    /// @notice Function to update the owner of the contract
+    /// @param newOwner The address of the new owner
     function updateOwner(address newOwner) external onlyOwner {
         owner = newOwner;
     }
