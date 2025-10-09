@@ -70,18 +70,18 @@ contract KipuBank {
     /// =========================== MODIFIERS ===========================
 
     modifier onlyOwner() {
-		if (msg.sender != owner) {
-			revert Unauthorized();
-		}
+        if (msg.sender != owner) {
+            revert Unauthorized();
+        }
         _;
     }
 
-	modifier onlyValidValue(uint256 value) {
-		if (value <= 0) {
-			revert InvalidValue();
-		}
-		_;
-	}
+    modifier onlyValidValue(uint256 value) {
+        if (value <= 0) {
+            revert InvalidValue();
+        }
+        _;
+    }
 
     /// =========================== FUNCTIONS ===========================
 
@@ -89,7 +89,7 @@ contract KipuBank {
     /// @param _maxBankCap The maximum capacity of the bank
     constructor(uint256 _maxBankCap) {
         MAX_BANK_CAP = _maxBankCap;
-		currentBankCap = MAX_BANK_CAP;
+        currentBankCap = MAX_BANK_CAP;
         owner = msg.sender;
     }
 
@@ -104,7 +104,7 @@ contract KipuBank {
 
         currentBankCap -= msg.value;
         balances[msg.sender] += msg.value;
-        countDeposits += 1;
+        incrementDepositCount();
 
         emit Deposit(msg.sender, msg.value);
     }
@@ -128,7 +128,7 @@ contract KipuBank {
 
         balances[msg.sender] -= _value;
         currentBankCap += _value;
-        countWithdraws += 1;
+        incrementWithdrawCount();
 
         (bool success, ) = msg.sender.call{value: _value}("");
         if (!success) {
@@ -153,5 +153,13 @@ contract KipuBank {
     /// @param newOwner The address of the new owner
     function updateOwner(address newOwner) external onlyOwner {
         owner = newOwner;
+    }
+
+    function incrementDepositCount() private {
+        countDeposits += 1;
+    }
+
+    function incrementWithdrawCount() private {
+        countWithdraws += 1;
     }
 }
