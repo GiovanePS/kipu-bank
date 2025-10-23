@@ -201,4 +201,8 @@ contract KipuBank is AccessControl {
     function revokeRecovery(address admin) external onlyRole(getRoleAdmin(RECOVERY_ROLE)) {
         _revokeRole(RECOVERY_ROLE, admin);
     }
+
+	receive() external payable {
+		revert("Direct ETH not allowed; use deposit()");
+	}
 }
