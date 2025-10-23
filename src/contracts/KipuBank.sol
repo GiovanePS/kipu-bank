@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
 /// @title My KipuBank
 /// @author Giovane Pimentel de Sousa
 /// @notice A simple bank contract with deposit and withdraw functionalities
 /// @dev I got 1-2-3-4-5-6-7-8 M`s in my bank account
-contract KipuBank {
+contract KipuBank is AccessControl {
     /// =========================== STATE VARIABLES ===========================
 
-    /// @notice address of the contract owner
-    address private owner;
+    /// @notice recovery role constant
+    bytes32 public constant RECOVERY_ROLE = keccak256("RECOVERY_ROLE");
 
     /// @notice Maximum value of Ether that can be withdrawn in a single transaction
     uint256 public constant ETHER_WITHDRAW_LIMIT = 10 ether;
@@ -41,6 +43,15 @@ contract KipuBank {
     /// @param value The amount of Ether withdrawn in wei
     event Withdraw(address indexed account, uint256 value);
 
+    /// @notice Emitted whenever an admin adjusts a user’s internal balance.
+    event BalanceAdjusted(
+        address indexed admin,
+        address indexed account,
+        uint256 previousBalance,
+        uint256 newBalance,
+        int256 capDelta // +X means cap increased (debited user), -X means cap decreased (credited user)
+    );
+
     /// =========================== ERRORS ===========================
 
     /// @notice Invalid value transaction request
@@ -64,17 +75,11 @@ contract KipuBank {
     /// @notice Error for failed transfer
     error TransferFailed();
 
-    /// @notice Unauthorized access
-    error Unauthorized();
-
     /// =========================== MODIFIERS ===========================
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) {
-            revert Unauthorized();
-        }
-        _;
-    }
+	modifier onlyAdminRole() {
+		_checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+		_;
+	}
 
     modifier onlyValidValue(uint256 value) {
         if (value <= 0) {
@@ -90,7 +95,9 @@ contract KipuBank {
     constructor(uint256 _maxBankCap) {
         MAX_BANK_CAP = _maxBankCap;
         currentBankCap = MAX_BANK_CAP;
-        owner = msg.sender;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(RECOVERY_ROLE, msg.sender);
     }
 
     /// @notice The actual deposit function
@@ -140,7 +147,7 @@ contract KipuBank {
 
     /// @notice Function to get the balance of a specific account
     /// @param account The address of the account to check the balance
-    function getBalance(address account) external view onlyOwner returns (uint256) {
+    function getBalance(address account) external view onlyAdminRole returns (uint256) {
         return balances[account];
     }
 
@@ -149,17 +156,49 @@ contract KipuBank {
         return balances[msg.sender];
     }
 
-    /// @notice Function to update the owner of the contract
-    /// @param newOwner The address of the new owner
-    function updateOwner(address newOwner) external onlyOwner {
-        owner = newOwner;
-    }
-
     function incrementDepositCount() private {
         countDeposits += 1;
     }
 
     function incrementWithdrawCount() private {
         countWithdraws += 1;
+    }
+
+    /// @notice Admin Recovery: set user's internal ETH balance.
+    function setInternalBalance(address account, uint256 newBalance) external onlyRole(RECOVERY_ROLE) {
+        uint256 oldBalance = balances[account];
+
+        if (newBalance == oldBalance) {
+            emit BalanceAdjusted(msg.sender, account, oldBalance, newBalance, 0);
+            return;
+        }
+
+		if (newBalance > oldBalance) {
+			uint256 delta = newBalance - oldBalance;
+			if (delta > currentBankCap) {
+				revert BankCapExceeded({
+					requested: delta,
+					available: currentBankCap
+				});
+			}
+			currentBankCap -= delta;
+			balances[account] = newBalance;
+			emit BalanceAdjusted(msg.sender, account, oldBalance, newBalance, -int256(delta));
+		} else {
+			uint256 delta = oldBalance - newBalance;
+			currentBankCap += delta;
+			balances[account] = newBalance;
+			emit BalanceAdjusted(msg.sender, account, oldBalance, newBalance, int256(delta));
+		}
+    }
+
+    /// @notice Grant recovery role to another admin
+    function grantRecovery(address admin) external onlyRole(getRoleAdmin(RECOVERY_ROLE)) {
+        _grantRole(RECOVERY_ROLE, admin);
+    }
+
+    /// @notice Revoke recovery role
+    function revokeRecovery(address admin) external onlyRole(getRoleAdmin(RECOVERY_ROLE)) {
+        _revokeRole(RECOVERY_ROLE, admin);
     }
 }
