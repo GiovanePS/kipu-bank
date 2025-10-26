@@ -4,7 +4,7 @@ A minimal ETH vault smart contract with **bank capacity**, **per-tx withdrawal l
 
 Here, you can:
 - **Deposit** ETH via `msg.value`.
-- **Withdraw** ETH (subject to a per-transaction limit).
+- **Withdraw** ETH (subject to **both** an ETH-per-transaction limit and a **USD** per-transaction limit via Chainlink).
 - **(Admins)** Inspect arbitrary user balances.
 - **(Recovery admins)** Adjust a user’s internal balance while preserving the bank-cap invariant.
 
@@ -29,13 +29,16 @@ Here, you can:
 - `MAX_BANK_CAP` (`immutable`): global capacity defined at deployment (in wei).
 - `currentBankCap`: remaining capacity that can still be deposited (in wei).
 - `balances[address]`: per-account ETH balances (in wei).
-- `ETHER_WITHDRAW_LIMIT` (`constant`): withdrawal limit per transaction (in wei).
+- `ETHER_WITHDRAW_LIMIT` (`constant`): **ETH-denominated** withdrawal limit per transaction.
+- `WITHDRAW_LIMIT_USDC` (`constant`): **USD-denominated** withdrawal limit per transaction, normalized to **6 decimals** (USDC-style). Default: `1,000 * 1e6` ($1,000.00).
+- `MAX_ORACLE_DELAY` (`constant`): maximum allowed staleness for the Chainlink price (e.g., `3 hours`).
+- `ethUsdFeed` (`immutable`): Chainlink **ETH/USD** Aggregator.
 - Counters: `countDeposits`, `countWithdraws`.
 
 ---
 
 ## Roles
-- `DEFAULT_ADMIN_ROLE` (`bytes32(0)`): top-level admin.
+- `DEFAULT_ADMIN_ROLE` (`bytes32(0)`): top-level admin (manages roles; can read any user's balance).
 - `RECOVERY_ROLE`: allowed to call `setInternalBalance`.
 
 **Bootstrap:** On deployment, `msg.sender` is granted both `DEFAULT_ADMIN_ROLE` and `RECOVERY_ROLE`.
@@ -54,10 +57,11 @@ Here, you can:
   - `BankCapExceeded(requested, available)` when exceeding `currentBankCap`
 
 - **`withdraw(uint256 value) external onlyValidValue(value)`**
-  Withdraws `value` from the caller’s balance. Reverts if:
-  - `InvalidValue()` when `value == 0`
-  - `WithdrawLimitExceeded(requested, limit)` when `value > ETHER_WITHDRAW_LIMIT`
+  Withdraws `value` **wei** from the caller’s balance. Reverts if:
   - `InsufficientBalance(requested, available)` when `value > balance`
+  - `WithdrawLimitExceeded(requested, limit)` when `value > ETHER_WITHDRAW_LIMIT` (**ETH limit**)
+  - `WithdrawLimitExceeded(requested, limit)` when `previewEthToUsdc(value) > WITHDRAW_LIMIT_USDC` (**USD limit**)
+  - `TransferFailed()` if the ETH transfer fails
 
 - **`getBalance() external view returns (uint256)`**
   Returns the caller’s balance (in wei).
@@ -70,6 +74,10 @@ Here, you can:
   - If `newBalance > oldBalance`, consumes `currentBankCap` by the delta.
   - If `newBalance < oldBalance`, increases `currentBankCap` by the delta.
   Emits `BalanceAdjusted`.
+
+- **`previewEthToUsdc(uint256 weiAmount) external view returns (uint256)`**
+  Converts a `weiAmount` to its **USD6** value using the current Chainlink **ETH/USD** price.
+  Useful to check how much you can withdraw under the USD limit.
 
 - **`grantRecovery(address admin) external onlyRole(getRoleAdmin(RECOVERY_ROLE))`**
   Grants `RECOVERY_ROLE` to `admin`.
@@ -94,6 +102,8 @@ Here, you can:
 - `WithdrawLimitExceeded(uint256 requested, uint256 limit)`
 - `InsufficientBalance(uint256 requested, uint256 available)`
 - `TransferFailed()`
+- `OraclePriceInvalid()`
+- `OracleStale(uint256 updatedAt, uint256 nowTs)`
 - `Unauthorized()` *(currently unused)*
 
 ---
@@ -101,8 +111,9 @@ Here, you can:
 ## Security Notes
 - **Checks-Effects-Interactions**: state updated before external calls.
 - **ETH transfers** use low-level `call` and revert on failure.
+- **Oracle checks**: reverts if the Chainlink price is invalid or stale beyond `MAX_ORACLE_DELAY`.
 - **Reentrancy**: current flow is safe by design; when features grow, consider `ReentrancyGuard`.
-- **Direct ETH**: `receive()` reverts to avoid accidental sends (ETH can still be *forced* via `selfdestruct`; acceptable here).
+- **Direct ETH**: `receive()` reverts to avoid accidental sends (ETH can still be forced via `selfdestruct`; acceptable here).
 
 ---
 
@@ -122,7 +133,9 @@ Here, you can:
    - **Environment**: *Injected Provider – MetaMask*.
    - **Account**: one with testnet ETH.
    - **Contract**: `KipuBank`.
-   - **Constructor arg**: `_maxBankCap` (wei), e.g. `100 ether`.
+   - **Constructor args**:
+     - `_maxBankCap` (wei), e.g., `100 ether`.
+     - `_ethUsdFeed` (Chainlink ETH/USD Aggregator). **Sepolia example**: `0x694AA1769357215DE4FAC081bf1f309aDC325306`.
    - Click **Deploy** and confirm.
 4. Post-deploy (optional): grant roles to other admins
    - `grantRole(DEFAULT_ADMIN_ROLE, <newAdmin>)`
@@ -137,7 +150,11 @@ Here, you can:
   In **VALUE**, input e.g. `0.1 ether`, then call `deposit()`.
 
 - **withdraw**
-  Call `withdraw(value)`, e.g. `0.05 ether` (or `50000000000000000` in wei).
+  Call `withdraw(value)`, e.g., `0.05 ether` (or `50000000000000000` wei).
+  The call will revert if:
+  - `value > ETHER_WITHDRAW_LIMIT` (ETH limit), **or**
+  - `previewEthToUsdc(value) > WITHDRAW_LIMIT_USDC` ($1,000 USD6 limit), **or**
+  - your balance is insufficient.
 
 - **getBalance()**
   Read your own balance (returns wei).
@@ -158,4 +175,3 @@ Here, you can:
 - **Network:** Sepolia
 - **Address:** `TBD`
 - **Explorer:** `TBD`
-
