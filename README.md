@@ -1,19 +1,20 @@
-# KipuBank
+# KipuBankV3
 
-A minimal multi-token vault with **dual bank capacity pools** — **ETH (wei)** and **USDC (USDC)** — **per-tx withdrawal limits** (ETH limit in wei **and** global USD $1,000 limit), and **role-based Admin Recovery** using OpenZeppelin `AccessControl`.
+A **DeFi-integrated multi-token vault** with **Uniswap V4 swap capabilities**, dual bank capacity pools (ETH and USDC), per-transaction withdrawal limits, and role-based admin recovery using OpenZeppelin `AccessControl`.
 
-**ETH sentinel (EIP-7528):** `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
+## Core Capabilities
 
-Here, you can:
-- **Deposit ETH** via `depositEth()` (value in `msg.value`).
-- **Deposit USDC** via `depositUsdc(amount)` (ERC-20 pull with `safeTransferFrom`).
-- **Withdraw ETH or USDC** with USD and ETH limits enforced.
-- **(Admins)** Inspect arbitrary user balances.
-- **(Recovery admins)** Adjust a user’s internal balance per-token while preserving the bank-cap invariants.
+- **Deposit ETH** via `depositEth()` (value in `msg.value`)
+- **Deposit USDC** via `depositUsdc(amount)` (ERC-20 pull with `safeTransferFrom`)
+- **Deposit Any Token** via `depositArbitraryToken()` (swaps to USDC via Uniswap V4)
+- **Withdraw ETH or USDC** with USD and ETH limits enforced
+- **(Admins)** Inspect arbitrary user balances
+- **(Recovery admins)** Adjust user internal balances per-token while preserving bank-cap invariants
 
 ---
 
 ## Table of Contents
+- [Core Capabilities](#core-capabilities)
 - [Summary](#summary)
 - [Roles](#roles)
 - [Contract Details](#contract-details)
@@ -22,7 +23,7 @@ Here, you can:
   - [Modifiers](#modifiers)
   - [Custom Errors](#custom-errors)
 - [Security Notes](#security-notes)
-- [How to Deploy (Remix)](#how-to-deploy-remix)
+- [How to Deploy](#how-to-deploy)
 - [How to Interact](#how-to-interact)
 - [Testing](#testing)
 - [Deployed Address](#deployed-address)
@@ -31,33 +32,38 @@ Here, you can:
 
 ## Summary
 - **Dual bank caps**
-  - `MAX_BANK_CAP_ETH` / `currentBankCapEth` (**wei**): ETH pool capacity and remaining headroom.
-  - `MAX_BANK_CAP_USDC` / `currentBankCapUsdc` (**USDC**): USDC pool capacity and remaining headroom (6-dec USD units).
-- `balances[user][token]`: per-account balances (**wei** for ETH (`address(0)`), **token units** for USDC).
-- `ETHER_WITHDRAW_LIMIT` (`constant`): max ETH per-transaction (in wei).
-- `USDC_WITHDRAW_LIMIT` (`constant`): global **USDC** withdrawal limit per-tx (default `$1,000 * 1e6`).
-- `MAX_ORACLE_DELAY` (`constant`): max Chainlink price staleness (e.g., `3 hours`).
-- `ethUsdFeed` (`immutable`): Chainlink **ETH/USD** Aggregator (used to convert ETH→USDC).
-- `USDC` (`immutable`): USDC token address.
-- Counters: `countDeposits`, `countWithdraws`.
+  - `MAX_BANK_CAP_ETH` / `currentBankCapEth` (**wei**): ETH pool capacity and remaining headroom
+  - `MAX_BANK_CAP_USDC` / `currentBankCapUsdc` (**USDC**): USDC pool capacity and remaining headroom (6-decimal USD units)
+- `balances[user][token]`: per-account balances (**wei** for ETH, **token units** for USDC)
+- `ETHER_WITHDRAW_LIMIT` (`constant`): max ETH per-transaction (10 ether in wei)
+- `USDC_WITHDRAW_LIMIT` (`constant`): global **USDC** withdrawal limit per-tx ($1,000 * 1e6)
+- `MAX_ORACLE_DELAY` (`constant`): max Chainlink price staleness (3 hours)
+- `DEFAULT_MIN_SWAP_OUTPUT` (`constant`): minimum swap output for slippage protection (1 USDC unit = 0.000001 USDC)
+- `MAX_SWAP_DEADLINE` (`constant`): maximum deadline extension for swaps (10 minutes)
+- `ethUsdFeed` (`immutable`): Chainlink **ETH/USD** Aggregator for ETH→USD conversion
+- `USDC` (`immutable`): USDC token address
+- `universalRouter` (`immutable`): Uniswap V4 Universal Router instance
+- `permit2` (`immutable`): Permit2 contract for token approvals
+- Counters: `countDeposits`, `countWithdraws`
 
-**ETH sentinel:** `address(0)`.
+**ETH sentinel:** `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` (EIP-7528)
 
 **Cap invariants:**
 - Deposit ETH → `currentBankCapEth -= amountWei`
 - Withdraw ETH → `currentBankCapEth += amountWei`
 - Deposit USDC → `currentBankCapUsdc -= usdc(amountToken)`
 - Withdraw USDC → `currentBankCapUsdc += usdc(amountToken)`
+- Swap to USDC → `currentBankCapUsdc -= swapOutput`
 
 ---
 
 ## Roles
-- `DEFAULT_ADMIN_ROLE` (`bytes32(0)`): top-level admin (manages roles; can read any user balance).
-- `RECOVERY_ROLE`: allowed to call `setInternalBalance` (per-token adjustments).
+- `DEFAULT_ADMIN_ROLE` (`bytes32(0)`): top-level admin (manages roles; can read any user balance)
+- `RECOVERY_ROLE`: allowed to call `setInternalBalance` for per-token balance adjustments
 
-**Bootstrap:** On deployment, `msg.sender` is granted both `DEFAULT_ADMIN_ROLE` and `RECOVERY_ROLE`.
+**Bootstrap:** On deployment, `msg.sender` is granted both `DEFAULT_ADMIN_ROLE` and `RECOVERY_ROLE`
 
-**Admin rotation:** `grantRole(DEFAULT_ADMIN_ROLE, newAdmin)` then `revokeRole(DEFAULT_ADMIN_ROLE, oldAdmin)`.
+**Admin rotation:** Use `grantRole(DEFAULT_ADMIN_ROLE, newAdmin)` then `revokeRole(DEFAULT_ADMIN_ROLE, oldAdmin)`
 
 ---
 
@@ -74,6 +80,20 @@ Here, you can:
   Pulls USDC from caller (`safeTransferFrom`). Reverts if:
   - `InvalidValue()` when `amount == 0`
   - `BankCapUsdcExceeded(requestedusdc, availableusdc)` when USDC value exceeds `currentBankCapUsdc`
+
+- **`depositArbitraryToken(address tokenIn, uint256 amountIn, PoolKey calldata poolKey, uint256 minAmountOut) external`**
+  Deposits any ERC-20 token, swaps it to USDC via Uniswap V4, and credits user balance. Reverts if:
+  - `InvalidValue()` when `amountIn == 0`
+  - `UnsupportedToken()` when `tokenIn` is ETH or USDC (use dedicated functions)
+  - `InvalidSwapParams()` when `poolKey` is invalid
+  - `BankCapUsdcExceeded()` when swap output exceeds capacity
+  - `SlippageExceeded()` when output is less than `minAmountOut`
+  
+  **Parameters:**
+  - `tokenIn`: Address of token to deposit
+  - `amountIn`: Amount of tokens to deposit
+  - `poolKey`: Uniswap V4 pool configuration (currency0, currency1, fee, tickSpacing, hooks)
+  - `minAmountOut`: Minimum USDC to receive (slippage protection)
 
 - **`withdraw(address token, uint256 amount) external`**
   Withdraws ETH (`token = 0x000…000`) or USDC (`token = USDC`). Reverts if:
@@ -110,6 +130,9 @@ Here, you can:
 - `event BalanceAdjusted(address indexed admin, address indexed account, address indexed token, uint256 previousBalance, uint256 newBalance, int256 capDelta)`
   > `capDelta` is **wei** for ETH; **USDC** for USDC. Positive = cap increased (user debited), negative = cap decreased (user credited).
 
+- `event TokenSwapped(address indexed user, address indexed tokenIn, uint256 amountIn, uint256 amountOut)`
+  > Emitted when an arbitrary token is swapped to USDC. `amountIn` is in source token units; `amountOut` is in USDC units.
+
 ### Modifiers
 - `onlyAdminRole()` → caller must have `DEFAULT_ADMIN_ROLE`.
 - `onlyValidValue(uint256 value)` → reverts with `InvalidValue()` if `value == 0`.
@@ -124,42 +147,61 @@ Here, you can:
 - `OraclePriceInvalid()`
 - `OracleStale(uint256 updatedAt, uint256 nowTs)`
 - `UnsupportedToken(address token)`
+- `SlippageExceeded(uint256 amountOut, uint256 minAmountOut)`
+- `InvalidSwapParams()`
 
 ---
 
 ## Security Notes
-- **Checks-Effects-Interactions** respected in `withdraw`.
-- **ETH transfers** use low-level `call` and revert on failure.
-- **Oracle checks**: reverts if Chainlink price is invalid or stale beyond `MAX_ORACLE_DELAY`.
-- **Reentrancy**: present design is safe; consider `ReentrancyGuard` if adding token callbacks in the future.
-- **Direct ETH**: `receive()` reverts to avoid accidental sends (ETH can still be force-sent via `SELFDESTRUCT`).
+- **Checks-Effects-Interactions** pattern followed in `withdraw` and swap functions
+- **ETH transfers** use low-level `call` and revert on failure
+- **Oracle checks**: reverts if Chainlink price is invalid or stale beyond `MAX_ORACLE_DELAY`
+- **Reentrancy protection**: `ReentrancyGuard` applied to `depositArbitraryToken` to prevent reentrancy attacks during swaps
+- **Slippage protection**: swap outputs must meet minimum thresholds
+- **Pool validation**: ensures PoolKey contains correct token pairs before swapping
+- **Direct ETH**: `receive()` reverts to avoid accidental sends (use `depositEth()` instead)
+- **Token approvals**: Uses `safeIncreaseAllowance` for safer ERC-20 interactions
+- **SafeERC20**: All token transfers use OpenZeppelin's SafeERC20 library
 
 ---
 
-## How to Deploy (Remix)
+## How to Deploy
 
 ### Prerequisites
-- **MetaMask** (or similar) on a **testnet** (e.g., **Sepolia**).
-- **Testnet ETH** (via faucet).
-- https://remix.ethereum.org
+- **MetaMask** (or similar wallet) on a **testnet** (e.g., **Sepolia**)
+- **Testnet ETH** (via faucet)
+- Access to [Remix IDE](https://remix.ethereum.org)
 
-### Step by Step
-1. Open Remix → create `KipuBank.sol` and paste the contract.
-2. **Solidity Compiler**:
-   - Version `^0.8.20` (or higher compatible).
-   - Click **Compile KipuBank.sol**.
-3. **Deploy & Run**:
-   - **Environment**: *Injected Provider – MetaMask*.
-   - **Contract**: `KipuBank`.
-   - **Constructor args**:
-     - `_maxBankCapEthWei` (e.g., `100 ether`)
-     - `_maxBankCapUsdc` (USDC, e.g., `$100,000 * 1e6`)
-     - `_ethUsdFeed` (Chainlink ETH/USD). **Sepolia example**: `0x694AA1769357215DE4FAC081bf1f309aDC325306`
-     - `_usdc` (USDC token address on the same network)
-   - Click **Deploy** and confirm.
-4. Post-deploy (optional): grant roles
-   - `grantRole(DEFAULT_ADMIN_ROLE, <newAdmin>)`
-   - `grantRecovery(<recoveryAdmin>)`
+### Deployment Steps
+
+1. Open [Remix IDE](https://remix.ethereum.org)
+
+2. Create `KipuBank.sol` and paste the contract code
+
+3. **Solidity Compiler**:
+   - Version `^0.8.28` or compatible
+   - Enable optimization (200 runs recommended)
+   - Click **Compile KipuBank.sol**
+
+4. **Deploy & Run**:
+   - Environment: *Injected Provider – MetaMask*
+   - Network: Select testnet (e.g., Sepolia)
+   - Contract: `KipuBank`
+   
+   **Constructor Parameters:**
+   - `_maxBankCapEthWei`: Maximum ETH capacity in wei (e.g., `100000000000000000000` = 100 ether)
+   - `_maxBankCapUsdc`: Maximum USDC capacity (e.g., `100000000000` = $100,000 with 6 decimals)
+   - `_ethUsdFeed`: Chainlink ETH/USD aggregator address
+     - **Sepolia**: `0x694AA1769357215DE4FAC081bf1f309aDC325306`
+   - `_usdc`: USDC token address for your network
+   - `_universalRouter`: Uniswap V4 Universal Router address
+   - `_permit2`: Permit2 contract address
+   
+   - Click **Deploy** and confirm transaction
+
+5. **Post-Deployment** (optional):
+   - Grant roles: `grantRole(DEFAULT_ADMIN_ROLE, <newAdmin>)`
+   - Add recovery admins: `grantRecovery(<recoveryAdmin>)`
 
 ---
 
@@ -172,8 +214,11 @@ Here, you can:
 - **depositUsdc**
   First, `approve` the contract to spend `amount`, then call `depositUsdc(amount)`.
 
+- **depositArbitraryToken**
+  First, `approve` the contract to spend token amount. Then construct the `poolKey` struct with the token pair information, set `minAmountOut` for slippage protection, and call `depositArbitraryToken(tokenAddress, amount, poolKey, minAmountOut)`.
+
 - **withdraw**
-  - ETH: `withdraw(0x0000000000000000000000000000000000000000, amountWei)`
+  - ETH: `withdraw(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, amountWei)`
   - USDC: `withdraw(<USDC_ADDRESS>, amountTokenUnits)`
   Reverts if USDC value `> USDC_WITHDRAW_LIMIT` ($1,000 * 1e6), or if ETH `amount > ETHER_WITHDRAW_LIMIT`, or if balance is insufficient.
 
@@ -191,9 +236,13 @@ Here, you can:
 
 ## Deployed Address
 
+> **TODO**: Add deployment information after contract is deployed
+
 **Network**: Sepolia Testnet
-**Contract Address**: `0xb90543adc05f1f13a2e8230c134e9cbca7748834`
-**Explorer**: [Sepolia Etherscan Link](https://sepolia.etherscan.io/tx/0x22c9e7f95ae7efe74a8e740fb310792668fb31bc759a345aaac9f23f6344ff56)
+**Contract Address**: TBD  
+**Explorer**: [Sepolia Etherscan Link]() TBD
+
+---
 
 ## Testing
 
