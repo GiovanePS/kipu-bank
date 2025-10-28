@@ -10,6 +10,9 @@ contract MockERC20 {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
     constructor(string memory _n, string memory _s, uint8 _d) {
         name = _n;
         symbol = _s;
@@ -19,10 +22,12 @@ contract MockERC20 {
     function mint(address to, uint256 amount) external {
         balanceOf[to] += amount;
         totalSupply += amount;
+        emit Transfer(address(0), to, amount);
     }
 
     function approve(address spender, uint256 amount) external returns (bool) {
         allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 
@@ -30,6 +35,7 @@ contract MockERC20 {
         require(balanceOf[msg.sender] >= amount, "bal");
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
+        emit Transfer(msg.sender, to, amount);
         return true;
     }
 
@@ -40,6 +46,7 @@ contract MockERC20 {
         require(balanceOf[from] >= amount, "bal");
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
+        emit Transfer(from, to, amount);
         return true;
     }
 }

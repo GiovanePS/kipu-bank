@@ -2,10 +2,12 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Mock Permit2 Contract
 /// @notice Simplified mock for testing token approvals
 contract MockPermit2 {
+    using SafeERC20 for IERC20;
     // Track approvals: owner => token => spender => amount
     mapping(address => mapping(address => mapping(address => uint256))) public allowance;
 
@@ -57,11 +59,8 @@ contract MockPermit2 {
 
         allowance[from][token][msg.sender] -= amount;
 
-        // Actually transfer the tokens
-        require(
-            IERC20(token).transferFrom(from, to, amount),
-            "MockPermit2: transfer failed"
-        );
+        // Actually transfer the tokens using SafeERC20
+        IERC20(token).safeTransferFrom(from, to, amount);
 
         emit TransferFrom(from, to, amount, token);
     }

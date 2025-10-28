@@ -3,11 +3,13 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title Mock Universal Router
 /// @notice Simplified mock for testing Uniswap V4 swaps
 /// @dev This mock simulates swaps with a fixed exchange rate for testing
 contract MockUniversalRouter {
+    using SafeERC20 for IERC20;
     address public immutable USDC;
 
     // Mock exchange rates (tokenIn address => USDC per token, scaled by 1e6)
@@ -62,7 +64,7 @@ contract MockUniversalRouter {
         (
             address recipient,
             uint256 amountIn,
-            uint256 minAmountOut,
+            ,
             PoolKey memory poolKey,
             bool zeroForOne
         ) = abi.decode(inputs[0], (address, uint256, uint256, PoolKey, bool));
@@ -72,8 +74,8 @@ contract MockUniversalRouter {
 
         require(tokenOut == USDC, "MockUniversalRouter: output must be USDC");
         uint256 amountOut = _calculateSwapOutput(tokenIn, amountIn);
-        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(USDC).transfer(recipient, amountOut);
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        IERC20(USDC).safeTransfer(recipient, amountOut);
 
         emit SwapExecuted(recipient, tokenIn, amountIn, amountOut);
     }
@@ -107,7 +109,7 @@ contract MockUniversalRouter {
     /// @notice Fund the router with USDC for testing
     /// @param amount The amount of USDC to add
     function fundRouter(uint256 amount) external {
-        IERC20(USDC).transferFrom(msg.sender, address(this), amount);
+        IERC20(USDC).safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Get USDC balance of router
