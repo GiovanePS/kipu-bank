@@ -43,7 +43,8 @@ contract KipuBank is AccessControl {
     uint8 private immutable feedDecimals;
 
 	/// @notice ETH token
-	address public constant ETH = address(0);
+	/// @dev https://eips.ethereum.org/EIPS/eip-7528
+	address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
 	/// @notice USDC token
 	address public immutable USDC;
