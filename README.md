@@ -2,6 +2,8 @@
 
 A minimal multi-token vault with **dual bank capacity pools** — **ETH (wei)** and **USDC (USD6)** — **per‑tx withdrawal limits** (ETH limit in wei **and** global USD $1,000 limit), and **role‑based Admin Recovery** using OpenZeppelin `AccessControl`.
 
+**ETH sentinel (EIP‑7528):** `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
+
 Here, you can:
 - **Deposit ETH** via `depositEth()` (value in `msg.value`).
 - **Deposit USDC** via `depositUsdc(amount)` (ERC‑20 pull with `safeTransferFrom`).
