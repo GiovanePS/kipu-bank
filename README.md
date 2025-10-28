@@ -189,6 +189,12 @@ Here, you can:
 
 ---
 
+## Deployed Address
+
+**Network**: Sepolia Testnet
+**Contract Address**: `0xb90543adc05f1f13a2e8230c134e9cbca7748834`
+**Explorer**: [Sepolia Etherscan Link](https://sepolia.etherscan.io/tx/0x22c9e7f95ae7efe74a8e740fb310792668fb31bc759a345aaac9f23f6344ff56)
+
 ## Testing
 
 You can test with **Hardhat + viem**. The examples below assume:
