@@ -236,11 +236,11 @@ A **DeFi-integrated multi-token vault** with **Uniswap V4 swap capabilities**, d
 
 ## Deployed Address
 
-> **TODO**: Add deployment information after contract is deployed
-
 **Network**: Sepolia Testnet
-**Contract Address**: TBD  
-**Explorer**: [Sepolia Etherscan Link]() TBD
+
+**Contract Address**: 0x2aa8300Db36788100521837763BD466f0c07005A
+
+**Explorer**: [Sepolia Etherscan Link](https://sepolia.etherscan.io/address/0x2aa8300db36788100521837763bd466f0c07005a)
 
 ---
 
